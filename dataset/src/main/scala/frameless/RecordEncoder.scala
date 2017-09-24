@@ -9,6 +9,7 @@ import shapeless.labelled.FieldType
 import shapeless._
 
 import scala.reflect.ClassTag
+import shapeless.ops.nat.ToInt
 
 case class RecordEncoderField(
   ordinal: Int,
@@ -25,7 +26,7 @@ object RecordEncoderFields {
     def value: List[RecordEncoderField] = Nil
   }
 
-  implicit def deriveRecord[K <: Symbol, H, T <: HList](
+  implicit def deriveRecordSymbol[K <: Symbol, H, T <: HList](
     implicit
     key: Witness.Aux[K],
     head: TypedEncoder[H],
@@ -38,17 +39,30 @@ object RecordEncoderFields {
       fieldEncoder :: tail.value.map(x => x.copy(ordinal = x.ordinal + 1))
     }
   }
+
+  implicit def deriveRecordNat[K <: Nat, H, T <: HList](
+    implicit
+    toInt: ToInt[K],
+    head: TypedEncoder[H],
+    tail: RecordEncoderFields[T]
+  ): RecordEncoderFields[FieldType[K, H] :: T] = new RecordEncoderFields[FieldType[K, H] :: T] {
+    def value: List[RecordEncoderField] = {
+      val fieldName = s"_${toInt()}"
+      val fieldEncoder = RecordEncoderField(0, fieldName, head)
+
+      fieldEncoder :: tail.value.map(x => x.copy(ordinal = x.ordinal + 1))
+    }
+  }
 }
 
-class RecordEncoder[F, G <: HList](
+class RecordEncoder[G <: HList](
   implicit
-  lgen: LabelledGeneric.Aux[F, G],
   fields: Lazy[RecordEncoderFields[G]],
-  classTag: ClassTag[F]
-) extends TypedEncoder[F] {
+  classTag: ClassTag[G]
+) extends TypedEncoder[G] {
   def nullable: Boolean = false
 
-  def sourceDataType: DataType = FramelessInternals.objectTypeFor[F]
+  def sourceDataType: DataType = FramelessInternals.objectTypeFor[G]
 
   def targetDataType: DataType = {
     val structFields = fields.value.value.map { field =>

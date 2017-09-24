@@ -8,7 +8,9 @@ import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter}
 import org.apache.spark.sql._
 import shapeless._
-import shapeless.ops.hlist.{Prepend, ToTraversable, Tupler}
+import shapeless.ops.hlist.{ Prepend, ToTraversable, Tupler, ZipWithIndex }
+import shapeless.labelled.FieldType
+import shapeless.ops.record.Values
 
 /** [[TypedDataset]] is a safer interface for working with `Dataset`.
   *
@@ -404,7 +406,7 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
   ): TypedDataset[A] = {
     implicit val ea = ca.uencoder
 
-    val tuple1: TypedDataset[Tuple1[A]] = selectMany(ca)
+    val tuple1: TypedDataset[FieldType[_0, A] :: HNil] = selectMany(ca)
 
     // now we need to unpack `Tuple1[A]` to `A`
 
@@ -434,7 +436,7 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
   ): TypedDataset[(A, B)] = {
     implicit val (ea,eb) = (ca.uencoder, cb.uencoder)
 
-    selectMany(ca, cb)
+    selectMany(ca, cb).tupled
   }
 
   /** Type-safe projection from type T to Tuple3[A,B,...]
@@ -449,7 +451,7 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
   ): TypedDataset[(A, B, C)] = {
     implicit val (ea, eb, ec) = (ca.uencoder, cb.uencoder, cc.uencoder)
 
-    selectMany(ca, cb, cc)
+    selectMany(ca, cb, cc).tupled
   }
 
   /** Type-safe projection from type T to Tuple4[A,B,...]
@@ -464,7 +466,7 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
      cd: TypedColumn[T, D]
   ): TypedDataset[(A, B, C, D)] = {
     implicit val (ea, eb, ec, ed) = (ca.uencoder, cb.uencoder, cc.uencoder, cd.uencoder)
-    selectMany(ca, cb, cc, cd)
+    selectMany(ca, cb, cc, cd).tupled
   }
 
   /** Type-safe projection from type T to Tuple5[A,B,...]
@@ -482,7 +484,7 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
     implicit val (ea, eb, ec, ed, ee) =
       (ca.uencoder, cb.uencoder, cc.uencoder, cd.uencoder, ce.uencoder)
 
-    selectMany(ca, cb, cc, cd, ce)
+    selectMany(ca, cb, cc, cd, ce).tupled
   }
 
   /** Type-safe projection from type T to Tuple6[A,B,...]
@@ -501,7 +503,7 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
     implicit val (ea, eb, ec, ed, ee, ef) =
       (ca.uencoder, cb.uencoder, cc.uencoder, cd.uencoder, ce.uencoder, cf.uencoder)
 
-    selectMany(ca, cb, cc, cd, ce, cf)
+    selectMany(ca, cb, cc, cd, ce, cf).tupled
   }
 
   /** Type-safe projection from type T to Tuple7[A,B,...]
@@ -521,7 +523,7 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
    implicit val (ea, eb, ec, ed, ee, ef, eg) =
      (ca.uencoder, cb.uencoder, cc.uencoder, cd.uencoder, ce.uencoder, cf.uencoder, cg.uencoder)
 
-   selectMany(ca, cb, cc, cd, ce, cf, cg)
+   selectMany(ca, cb, cc, cd, ce, cf, cg).tupled
  }
 
   /** Type-safe projection from type T to Tuple8[A,B,...]
@@ -542,7 +544,7 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
    implicit val (ea, eb, ec, ed, ee, ef, eg, eh) =
      (ca.uencoder, cb.uencoder, cc.uencoder, cd.uencoder, ce.uencoder, cf.uencoder, cg.uencoder, ch.uencoder)
 
-   selectMany(ca, cb, cc, cd, ce, cf, cg, ch)
+   selectMany(ca, cb, cc, cd, ce, cf, cg, ch).tupled
  }
 
   /** Type-safe projection from type T to Tuple9[A,B,...]
@@ -564,7 +566,7 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
    implicit val (ea, eb, ec, ed, ee, ef, eg, eh, ei) =
      (ca.uencoder, cb.uencoder, cc.uencoder, cd.uencoder, ce.uencoder, cf.uencoder, cg.uencoder, ch.uencoder, ci.uencoder)
 
-   selectMany(ca, cb, cc, cd, ce, cf, cg, ch, ci)
+   selectMany(ca, cb, cc, cd, ce, cf, cg, ch, ci).tupled
  }
 
   /** Type-safe projection from type T to Tuple10[A,B,...]
@@ -586,10 +588,22 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
   ): TypedDataset[(A, B, C, D, E, F, G, H, I, J)] = {
    implicit val (ea, eb, ec, ed, ee, ef, eg, eh, ei, ej) =
      (ca.uencoder, cb.uencoder, cc.uencoder, cd.uencoder, ce.uencoder, cf.uencoder, cg.uencoder, ch.uencoder, ci.uencoder, cj.uencoder)
-   selectMany(ca, cb, cc, cd, ce, cf, cg, ch, ci, cj)
+   selectMany(ca, cb, cc, cd, ce, cf, cg, ch, ci, cj).tupled
  }
 
-  object selectMany extends ProductArgs {
+  def tupled[F <: HList, V <: HList, P <: Product](
+    implicit
+    isHList: T =:= F,
+    values: Values.Aux[F, V],
+    tupler: Tupler.Aux[V, P],
+    enc: TypedEncoder[P]
+  ): TypedDataset[P] = {
+    TypedDataset.create {
+      dataset.toDF().as[P](TypedExpressionEncoder[P])
+    }
+  }
+
+  object selectManyTupled extends ProductArgs {
     def applyProduct[U <: HList, Out0 <: HList, Out](columns: U)(
       implicit
       ct: ColumnTypes.Aux[T, U, Out0],
@@ -602,6 +616,23 @@ class TypedDataset[T] protected[frameless](val dataset: Dataset[T])(implicit val
         .as[Out](TypedExpressionEncoder[Out])
 
       TypedDataset.create[Out](selected)
+    }
+  }
+
+  object selectMany extends ProductArgs {
+    def applyProduct[U <: HList, CT <: HList, CTWithIndex <: HList, Indexed <: HList](columns: U)(
+      implicit
+      ct: ColumnTypes.Aux[T, U, CT],
+      toTraversable: ToTraversable.Aux[U, List, UntypedExpression[T]],
+      zipped: ZipWithIndex.Aux[CT, CTWithIndex],
+      indexed: IndexedRecord.Aux[CTWithIndex, Indexed],
+      encoder: TypedEncoder[Indexed]
+    ): TypedDataset[Indexed] = {
+      val selected = dataset.toDF()
+        .select(toTraversable(columns).map(c => new Column(c.expr)): _*)
+        .as[Indexed](TypedExpressionEncoder[Indexed])
+
+      TypedDataset.create[Indexed](selected)
     }
   }
 

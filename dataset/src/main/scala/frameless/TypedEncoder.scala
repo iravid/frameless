@@ -328,9 +328,17 @@ object TypedEncoder {
   implicit def usingDerivation[F, G <: HList](
     implicit
     lgen: LabelledGeneric.Aux[F, G],
-    recordEncoder: Lazy[RecordEncoderFields[G]],
-    classTag: ClassTag[F]
-  ): TypedEncoder[F] = new RecordEncoder[F, G]
+    fields: Lazy[RecordEncoderFields[G]],
+    classTagF: ClassTag[F],
+    classTagG: ClassTag[G]
+  ): TypedEncoder[F] = new TypedEncoder[F] {
+    val recordEncoder = new RecordEncoder[G]
+
+    def nullable: Boolean = false
+    def sourceDataType: DataType = ObjectType(classTagF.runtimeClass)
+    def targetDataType: DataType = recordEncoder.targetDataType
+    def extractorFor(path: Expression): Expression = Invoke()
+  }
 
   /** Encodes things using a Spark SQL's User Defined Type (UDT) if there is one defined in implicit */
   implicit def usingUserDefinedType[A >: Null : UserDefinedType : ClassTag]: TypedEncoder[A] = {
@@ -348,4 +356,10 @@ object TypedEncoder {
         Invoke(udtInstance, "deserialize", ObjectType(udt.userClass), Seq(path))
     }
   }
+
+  implicit def hlistEncoder[F <: HList](
+    implicit
+    recordEncoder: Lazy[RecordEncoderFields[F]],
+    cls: ClassTag[F]
+  ): TypedEncoder[F] = new RecordEncoder[F]
 }

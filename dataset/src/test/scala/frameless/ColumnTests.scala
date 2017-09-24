@@ -18,7 +18,7 @@ class ColumnTests extends TypedDatasetSuite {
         A <= B, A <= b,
         A > B, A > b,
         A >= B, A >= b
-      ).collect().run().toVector
+      ).tupled.collect().run().toVector
 
       dataset2 ?= Vector((a < b, a < b, a <= b, a <= b, a > b, a > b, a >= b, a >= b))
 
