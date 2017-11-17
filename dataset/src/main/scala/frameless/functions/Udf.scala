@@ -120,6 +120,9 @@ case class FramelessUdf[T, R](
     val code = CodeFormatter.stripOverlappingComments(
       new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
 
+    println("Generated code for UDF:")
+    println(code.body)
+
     val codegen = CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[InternalRow => AnyRef]
 
     codegen(input)
